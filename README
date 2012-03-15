@@ -1,6 +1,6 @@
 This is a simple fluid simulation I put together in about a day to start playing with Google's Native Client.  Going forward I will be optimizing it for speed and then moving the rendering over to the GPU (and hopefully making it a little more pleasant to look at).
   
-The fluid simulation based off this paper:
+The fluid simulation is based off this paper:
 
 	http://www.iro.umontreal.ca/labs/infographie/papers/Clavet-2005-PVFS/pvfs.pdf
 	
