@@ -20,44 +20,110 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#ifndef HH_SPH_UTIL_HH
-#define HH_SPH_UTIL_HH
+#ifndef HH_SDFC_UTIL_HH
+#define HH_SDFC_UTIL_HH
 #include <math.h>
 #include <sys/time.h>
+#include <algorithm>
 
 ///////////////////////////////////////////////////////////////////////////////
-struct Point
-{
-	float x;
-	float y;
-};
-///////////////////////////////////////////////////////////////////////////////
-inline void Sub(const Point & a, const Point & b, Point * out)
-{
-	out->x = a.x - b.x;
-	out->y = a.y - b.y;
-}
-///////////////////////////////////////////////////////////////////////////////
-inline float Length(const Point & pt)
-{
-	return sqrt(pt.x * pt.x + pt.y * pt.y);
-}
-///////////////////////////////////////////////////////////////////////////////
-inline float Length2(const Point & pt)
-{
-	return pt.x * pt.x + pt.y * pt.y;
-}
-///////////////////////////////////////////////////////////////////////////////
-inline float Dot(const Point & a, const Point & b)
-{
-	return a.x * b.x + a.y * b.y;
-}
-///////////////////////////////////////////////////////////////////////////////
-inline int64_t GetTimeMicro() 
+inline int64_t GetTimeMS() 
 {
 	struct timeval t;
 	gettimeofday(&t, NULL);
 	return (int64_t)(t.tv_sec) * 1000 + (t.tv_usec / 1000);
 }
+///////////////////////////////////////////////////////////////////////////////
+inline float frand()
+{
+	return rand() / (float)RAND_MAX;
+}
+///////////////////////////////////////////////////////////////////////////////
+inline void DrawCircle(int32_t * pixels, int xres, int yres, int x, int y, 
+	int r, int rgb = 0xff0000ff)
+{
+	int ulx = std::max(x - r, 0);
+	int uly = std::max(y - r, 0);
+	int lrx = std::min(x + r, xres - 1);
+	int lry = std::min(y + r, yres - 1);
+	for (int i=uly; i<lry; i++)
+	{
+		for (int j=ulx; j<lrx; j++)
+		{
+			int d2 = ((x - j) * (x - j)) + ((y - i) * (y - i));
+			if (d2 <= (r * r))
+			{
+				pixels[(i * xres) + j] = rgb;
+			}
+		}
+	}
+}
+///////////////////////////////////////////////////////////////////////////////
+inline void DrawLine(int32_t * pixels, int xres, int yres, int x0, int y0, 
+	int x1, int y1, int rgb = 0xff0000ff)
+{
+    int dx = (x1 - x0);
+    char ix = (dx > 0) - (dx < 0);
+    dx = std::abs(dx) << 1;
 
-#endif // HH_SPH_UTIL_HH
+    int dy = y1 - y0;
+    char iy = (dy > 0) - (dy < 0);
+    dy = std::abs(dy) << 1;
+
+    if ((y0 >= 0 && y0 < yres) && (x0 >= 0 && x0 < xres))
+	    pixels[(y0*xres)+x0] = rgb;
+
+    if (dx >= dy)
+    {
+        // error may go below zero
+        int error = dy - (dx >> 1);
+
+        while (x0 != x1)
+        {
+            if (error >= 0)
+            {
+                if (error || (ix > 0))
+                {
+                    y0 += iy;
+                    error -= dx;
+                }
+                // else do nothing
+            }
+            // else do nothing
+ 
+            x0 += ix;
+            error += dy;
+ 
+            if ((y0 >= 0 && y0 < yres) && (x0 >= 0 && x0 < xres))
+	    		pixels[(y0*xres)+x0] = rgb;
+        }
+    }
+    else
+    {
+        // error may go below zero
+        int error = dx - (dy >> 1);
+
+        while (y0 != y1)
+        {
+            if (error >= 0)
+            {
+                if (error || (iy > 0))
+                {
+                    x0 += ix;
+                    error -= dy;
+                }
+                // else do nothing
+            }
+            // else do nothing
+ 
+            y0 += iy;
+            error += dx;
+ 
+            if ((y0 >= 0 && y0 < yres) && (x0 >= 0 && x0 < xres))
+	    		pixels[(y0*xres)+x0] = rgb;
+        }
+    }
+}
+///////////////////////////////////////////////////////////////////////////////
+
+#endif // HH_SDFC_UTIL_HH

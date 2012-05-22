@@ -20,8 +20,8 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#ifndef HH_SPH_INSTANCE_HH
-#define HH_SPH_INSTANCE_HH
+#ifndef HH_APP_INSTANCE_HH
+#define HH_APP_INSTANCE_HH
 
 #include <ppapi/cpp/instance.h>
 #include <ppapi/cpp/graphics_2d.h>
@@ -30,11 +30,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <ppapi/cpp/size.h>
 #include <ppapi/cpp/input_event.h>
 
-class SPHInstance : public pp::Instance 
+#include "Fluid.h"
+
+class AppInstance : public pp::Instance 
 {
 public:
-	explicit SPHInstance(PP_Instance instance);
-	virtual ~SPHInstance();
+	explicit AppInstance(PP_Instance instance);
+	virtual ~AppInstance();
 
 	virtual void HandleMessage(const pp::Var & var_message);
 	virtual bool HandleInputEvent(const pp::InputEvent & event);
@@ -44,6 +46,9 @@ public:
 	void FlushComplete() { bFlushIsPending = false; }
 
 private:
+	void Clear();
+	void UpdateSimulation();
+	void RenderSimulation();
 	void FlushPixelBuffer();
 	void CreateContext(const pp::Size & size);
 	void DestroyContext();
@@ -53,6 +58,18 @@ private:
 	int 				nWidth;
 	int 				nHeight;
 	bool				bFlushIsPending;
+	bool				bRenderSurface;
+	bool				bRenderDistance;
+	bool				bRenderFiltered;
+	bool				bMouseDown;
+	bool				bOneDown;
+	bool				bTwoDown;
+	float				fMouseX;
+	float				fMouseY;
+
+	FluidSim * 			sim;
+	Fluid * 			water;
+	Fluid * 			oil;
 };
 
-#endif // HH_SPH_INSTANCE_HH
+#endif // HH_APP_INSTANCE_HH

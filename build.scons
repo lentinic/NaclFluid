@@ -11,6 +11,6 @@ import os
 nacl_env = make_nacl_env.NaClEnvironment(
     use_c_plus_plus_libs=True, nacl_platform=os.getenv('NACL_TARGET_PLATFORM'))
 
-sources = ['sph_instance.cc', 'sph_module.cc', 'fluidsim.cc']
+sources = ['app_instance.cc', 'app_module.cc', 'Fluid.cc', 'DistanceField.cc']
 
-nacl_env.AllNaClModules(sources, 'sph_test')
+nacl_env.AllNaClModules(sources, 'fluidapp')

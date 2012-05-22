@@ -21,18 +21,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
 #include <ppapi/cpp/module.h>
-#include "sph_instance.h"
+#include "app_instance.h"
 
 ///////////////////////////////////////////////////////////////////////////////
-class SPHModule : public pp::Module 
+class AppModule : public pp::Module 
 {
 public:
-	SPHModule() : pp::Module() {}
-	virtual ~SPHModule() {}
+	AppModule() : pp::Module() {}
+	virtual ~AppModule() {}
 
 	virtual pp::Instance * CreateInstance(PP_Instance instance) 
 	{
-		return new SPHInstance(instance);
+		return new AppInstance(instance);
 	}
 };
 ///////////////////////////////////////////////////////////////////////////////
@@ -40,7 +40,7 @@ namespace pp
 {
 	Module * CreateModule() 
 	{
-		return new SPHModule();
+		return new AppModule();
 	}
 }
 ///////////////////////////////////////////////////////////////////////////////

@@ -19,380 +19,374 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
-/* 
-	Based off the paper:
-	http://www.iro.umontreal.ca/labs/infographie/papers/Clavet-2005-PVFS/pvfs.pdf
-*/
+
 #include <algorithm>
 #include <vector>
+#include <list>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include "Util.h"
-
-void UpdateSimulation(float);
-void ApplyViscosity(float);
-void AdjustSprings(float);
-void ApplySpringDisplacement(float);
-void ApplyRelaxation(float);
-void ResolveCollisions(float);
-
-// Global Parameters
-int nParticles;
-float fGravity;
-float fNearDistance;
-float fViscosity[2];
-float fYieldLength;
-float fPressure;
-float fPressureNear;
-float fRestPressure;
-float fCollisionRadius;
-float fRestitution;
-float fFriction;
-float fAlpha;
-float fSpring;
-
-// Simulation state
-Point * velocity = NULL;
-Point * position = NULL;
-Point * position_old = NULL;
-
-#define RES 8
-typedef std::vector<int> Cell;
-Cell grid[RES][RES];
-
-void GetGridCell(const Point & pt, int * outx, int * outy)
-{
-	int gx = (int) (pt.x * (float)RES);
-	int gy = (int) (pt.y * (float)RES);
-	*outx = std::max(0, std::min(gx, RES-1));
-	*outy = std::max(0, std::min(gy, RES-1));
-}
+#include "DistanceField.h"
+#include "Fluid.h"
 
 ///////////////////////////////////////////////////////////////////////////////
-void InitSimulation(int count)
+//
+// ---------------------------------- Fluid ----------------------------------- 
+//
+///////////////////////////////////////////////////////////////////////////////
+Fluid::Fluid(int gwidth, int gheight)
+:	Color(0xff0000ff),
+	Density(3.5f),
+	Stiffness(0.5f),
+	Viscosity(0.f)
 {
-	fGravity = -9.8f / 100.f;
-	fRestitution = 0.4f;
-	fFriction = 0.001f;
+	Grid = new GridCell*[gheight];
+	Grid[0] = new GridCell[gheight * gwidth];
+	for (int i=1; i<gheight; i++)
+		Grid[i] = Grid[i-1] + gwidth;
+}
+///////////////////////////////////////////////////////////////////////////////
+Fluid::~Fluid()
+{
+	delete [] Grid[0];
+	delete [] Grid;
+	Grid = NULL;
+}
+///////////////////////////////////////////////////////////////////////////////
+void Fluid::AddParticle(float x, float y, float vx, float vy)
+{
+	Particle p;
+	p.x = x;
+	p.y = y;
+	p.vx = vx;
+	p.vy = vy;
+	Particles.push_back(p);
+	Weights.push_back(CellWeight());
+}
+///////////////////////////////////////////////////////////////////////////////
 
-	fNearDistance = 1.f / 16.f;
-	fViscosity[0] = 0.3f;
-	fViscosity[1] = 0.0f;
-	fYieldLength = 0.3f;
-	fAlpha = 0.3f;
-	fSpring = 0.3f;
-	fPressure = 0.004f;
-	fPressureNear = 0.01f;
-	fRestPressure = 10.f;
-	fCollisionRadius = 16.f / 100.f;
 
-	velocity = (Point *) malloc(sizeof(Point) * count);
-	position = (Point *) malloc(sizeof(Point) * count);
-	position_old = (Point *) malloc(sizeof(Point) * count);
+///////////////////////////////////////////////////////////////////////////////
+//
+// --------------------------------- FluidSim --------------------------------- 
+//
+///////////////////////////////////////////////////////////////////////////////
+FluidSim::FluidSim(int width, int height, float scale)
+{
+	Scale = scale;
+	GWidth = (width / scale) + 1;
+	GHeight = (height / scale) + 1;
 
-	for (int i=0; i<count; i++)
+	Grid = new GridCell*[GHeight];
+	Grid[0] = new GridCell[GWidth * GHeight];
+	for (int i=1; i<GHeight; i++)
+		Grid[i] = Grid[i - 1] + GWidth;
+
+	GridCoeff = 1.f;
+	GravityX = 0.f;
+	GravityY = (9.81f / scale) * (1.f / 900.f);
+
+	SDF.Create(256, GWidth, GHeight);
+	SDF.SubRect(2.f, 2.f, GWidth-4.f, GHeight-4.f);
+	SDF.Blur();
+}
+///////////////////////////////////////////////////////////////////////////////
+FluidSim::~FluidSim()
+{
+	delete [] Grid[0];
+	delete [] Grid;
+	Grid = NULL;
+
+	for (unsigned i=0; i<Fluids.size(); i++)
+		delete Fluids[i];
+	Fluids.clear();
+}
+///////////////////////////////////////////////////////////////////////////////
+void FluidSim::Update()
+{
+	// Clear all grid cells
+	memset(Grid[0], 0, sizeof(GridCell) * GWidth * GHeight);
+	for (int i=0, lim=Fluids.size(); i<lim; i++)
+		memset(Fluids[i]->Grid[0], 0, sizeof(GridCell) * GWidth * GHeight);
+
+	// Fill out grid initial grid information
+	for (int i=0, lim=Fluids.size(); i<lim; i++)
+		InitGrid(Fluids[i]);
+
+	// Average grid velocity
+	for (int y=0, ylim=GHeight; y<ylim; y++)
 	{
-		position[i].x = (rand() & 4095) / 4096.f;
-		position[i].y = 1.f - ((rand() & 4095) / 32768.f);
-
-		int gx, gy;
-		GetGridCell(position[i], &gx, &gy);
-		grid[gx][gy].push_back(i);
-			
-		velocity[i].y = 0.f;
-		velocity[i].x = (1.f - ((rand() & 4095) / 2048.f)) / 10.f;
-	}
-
-	nParticles = count;
-}
-///////////////////////////////////////////////////////////////////////////////
-void ShutdownSimulation()
-{
-	free(velocity);
-	free(position);
-	free(position_old);
-
-	velocity = NULL;
-	position = NULL;
-	position_old = NULL;
-}
-///////////////////////////////////////////////////////////////////////////////
-void DrawCircle(int32_t * pixels, int xres, int yres, int x, int y, int r)
-{
-	int ulx = std::max(x - r, 0);
-	int uly = std::max(y - r, 0);
-	int lrx = std::min(x + r, xres - 1);
-	int lry = std::min(y + r, yres - 1);
-	for (int i=uly; i<lry; i++)
-	{
-		for (int j=ulx; j<lrx; j++)
+		for (int x=0, xlim=GWidth; x<xlim; x++)
 		{
-			int d2 = ((x - j) * (x - j)) + ((y - i) * (y - i));
-			if (d2 <= (r * r))
+			float m = Grid[y][x].m;
+			if (m == 0.f)
+				continue;
+			Grid[y][x].vx /= m;
+			Grid[y][x].vy /= m;
+		}
+	}
+	
+	// Compute particle acceleration and propagate to grid
+	for (int i=0, lim=Fluids.size(); i<lim; i++)
+		CalcAccel(Fluids[i]);
+
+	// Average grid acceleration
+	for (int y=0, ylim=GHeight; y<ylim; y++)
+	{
+		for (int x=0, xlim=GWidth; x<xlim; x++)
+		{
+			GridCell & cell = Grid[y][x];
+			float m = cell.m;
+			if (m == 0.f)
+				continue;
+			cell.ax /= m;
+			cell.ay /= m;
+		}
+	}
+	
+	// Update fluid velocity fields
+	// Update particle positions
+	for (int i=0, lim=Fluids.size(); i<lim; i++)
+	{
+		CalcVelocity(Fluids[i]);
+		UpdateParticles(Fluids[i]);
+	}
+}
+///////////////////////////////////////////////////////////////////////////////
+void FluidSim::InitGrid(Fluid * fluid)
+{
+	for (int i=0, lim=fluid->Particles.size(); i<lim; i++)
+	{
+		Particle p = fluid->Particles[i];
+
+		int cx = std::min(GWidth-3, std::max(0, (int)(p.x - 0.5f)));
+		int cy = std::min(GHeight-3, std::max(0, (int)(p.y - 0.5f)));
+
+		float u = (float)cx - p.x;
+		float v = (float)cy - p.y;
+
+		CellWeight & weight = fluid->Weights[i];
+
+		// Biquadratic interpolation weights along each axis
+		weight.wx[0] = 0.5f * u * u + 1.5f * u + 1.125f;
+		weight.gx[0] = u + 1.5f;
+		u++;
+		weight.wx[1] = -u * u + 0.75f;
+		weight.gx[1] = -2.f * u;
+		u++;
+		weight.wx[2] = 0.5f * u * u - 1.5f * u + 1.125f;
+		weight.gx[2] = u - 1.5f;
+
+		weight.wy[0] = 0.5f * v * v + 1.5f * v + 1.125f;
+		weight.gy[0] = v + 1.5f;
+		v++;
+		weight.wy[1] = -v * v + 0.75f;
+		weight.gy[1] = -2.f * v;
+		v++;
+		weight.wy[2] = 0.5f * v * v - 1.5f * v + 1.125f;
+		weight.gy[2] = v - 1.5f;
+
+		for (int y=0; y<3; y++)
+		{
+			for (int x=0; x<3; x++)
 			{
-				pixels[(i * xres) + j] = 0xff0000ff;
+				float w = weight.wy[y] * weight.wx[x];
+
+				GridCell & cell = Grid[cy + y][cx + x];
+				cell.m += w;
+				cell.vx += p.vx * w;
+				cell.vy += p.vy * w;
 			}
 		}
 	}
 }
 ///////////////////////////////////////////////////////////////////////////////
-void RenderSimulation(int32_t * pixels, int x_res, int y_res)
+void FluidSim::CalcAccel(Fluid * fluid)
 {
-	memset(pixels, 0, sizeof(int32_t) * x_res * y_res);
-	for (int i=0; i<nParticles; i++)
+	for (int i=0, lim=fluid->Particles.size(); i<lim; i++)
 	{
-		int x = int(position[i].x * x_res);
-		x = std::max(0, std::min(x, x_res - 1));
-		int y = int((1.f - position[i].y) * y_res);
-		y = std::max(0, std::min(y, y_res - 1));
-		
-		DrawCircle(pixels, x_res, y_res, x, y, 8);
-	}
-}
-///////////////////////////////////////////////////////////////////////////////
-void UpdateSimulation(float dt)
-{
-	for (int i=0; i<nParticles; i++)
-	{
-		velocity[i].y = (velocity[i].y + dt * fGravity);	
-	}
+		float fx = fluid->Particles[i].x;
+		float fy = fluid->Particles[i].y;
+		int cx = std::min(GWidth-3, std::max(0, (int)(fx - 0.5f)));
+		int cy = std::min(GHeight-3, std::max(0, (int)(fy - 0.5f)));
 
-	ApplyViscosity(dt);
+		CellWeight & weight = fluid->Weights[i];
 
-	for (int i=0; i<nParticles; i++)
-	{
-		// save position
-		position_old[i].x = position[i].x;
-		position_old[i].y = position[i].y;
-		// predicted new position
-		position[i].x = position[i].x + velocity[i].x * dt;
-		position[i].y = position[i].y + velocity[i].y * dt;
-	}
-
-	ApplyRelaxation(dt);
-
-	// TODO: Don't be dumb by rebuilding the grid every update...
-	for (int i=0; i<RES; i++)
-	{
-		for (int j=0; j<RES; j++)
+		// Determine interpolated mass and velocity derivatives
+		float dudx = 0.f, dudy = 0.f;
+		float dvdx = 0.f, dvdy = 0.f;
+		float mass = 0.f;
+		for (int y=0; y<3; y++)
 		{
-			grid[i][j].clear();
-		}
-	}
-
-	// update velocity, grid cells
-	for (int i=0; i<nParticles; i++)
-	{
-		velocity[i].x = (position[i].x - position_old[i].x) / dt;
-		velocity[i].y = (position[i].y - position_old[i].y) / dt;
-
-		int nx, ny;
-		GetGridCell(position[i], &nx, &ny);
-		grid[nx][ny].push_back(i);
-	}
-
-	ResolveCollisions(dt);
-}
-///////////////////////////////////////////////////////////////////////////////
-void ApplyViscosity(float dt)
-{
-	for (int j=0; j<nParticles; j++)
-	{
-		int gx, gy;
-		GetGridCell(position[j], &gx, &gy);
-		int ulx = std::max(0, gx - 1);
-		int uly = std::max(0, gy - 1);
-		int lrx = std::min(RES-1, gx + 1);
-		int lry = std::min(RES-1, gy + 1);
-
-		for (int x=ulx; x<=lrx; x++)
-		{
-			for (int y=uly; y<=lry; y++)
+			for (int x=0; x<3; x++)
 			{
-				Cell & cell = grid[x][y];
-				for (unsigned i=0; i<cell.size(); i++)
-				{
-					int id = cell[i];
-					if (j == id)
-						continue;
+				float w = weight.wx[x] * weight.wy[y];
+				float dx = weight.gx[x] * weight.wy[y];
+				float dy = weight.wx[x] * weight.gy[y];
 
-					Point dir;
-					Sub(position[id], position[j], &dir);
-					float d = Length(dir);
-					float q = d / fNearDistance;
+				GridCell & cell = Grid[cy + y][cx + x];
 
-					if (q < 1.f)
-					{
-						dir.x = dir.x / d;
-						dir.y = dir.y / d;
-
-						Point diff_vel;
-						Sub(velocity[id], velocity[j], &diff_vel);
-						float u = Dot(dir, diff_vel);
-						if (u > 0.f)
-						{
-							float coeff = dt * (1.f - q) * (fViscosity[0] * u + fViscosity[1] * u * u);
-							Point impulse;
-							impulse.x = dir.x * coeff * 0.5f;
-							impulse.y = dir.y * coeff * 0.5f;
-							velocity[id].x -= impulse.x;
-							velocity[id].y -= impulse.y;
-							velocity[j].x += impulse.x;
-							velocity[j].y += impulse.y;
-						}
-					}
-				}
-			}	
-		}
-	}
-}
-///////////////////////////////////////////////////////////////////////////////
-void ApplyRelaxation(float dt)
-{
-	for (int i=0; i<nParticles; i++)
-	{
-		float p = 0.f;
-		float p_near = 0.f;
-
-		int gx, gy;
-		GetGridCell(position[i], &gx, &gy);
-		int ulx = std::max(0, gx - 1);
-		int uly = std::max(0, gy - 1);
-		int lrx = std::min(RES-1, gx + 1);
-		int lry = std::min(RES-1, gy + 1);
-
-		for (int x=ulx; x<=lrx; x++)
-		{
-			for (int y=uly; y<=lry; y++)
-			{
-				Cell & cell = grid[x][y];
-				for (unsigned j=0; j<cell.size(); j++)
-				{
-					int id = cell[j];
-					if (i == id)
-						continue;
-
-					Point dir;
-					Sub(position[id], position[i], &dir);
-					float q = Length(dir) / fNearDistance;
-					if (q < 1.f)
-					{
-						float co = 1.f - q;
-						p += co * co;
-						p_near += co * co * co;
-					} 
-				}
+				dudx += cell.vx * dx;
+				dudy += cell.vx * dy;
+				dvdx += cell.vy * dx;
+				dvdy += cell.vy * dy;
+				mass += cell.m * w;
 			}
-		}
-
-		p = fPressure * (p - fRestPressure);
-		p_near = fPressureNear * p_near;
-
-		Point delta;
-		delta.x = delta.y = 0.f;
-		for (int x=ulx; x<=lrx; x++)
-		{
-			for (int y=uly; y<=lry; y++)
-			{
-				Cell & cell = grid[x][y];
-				for (unsigned j=0; j<cell.size(); j++)
-				{
-					int id = cell[j];
-					if (i == id)
-						continue;
-
-					Point dir;
-					Sub(position[id], position[i], &dir);
-					float d = Length(dir);
-					float q = d / fNearDistance;
-					dir.x /= d;
-					dir.y /= d;
-					if (q < 1.f)
-					{
-						Point D;
-						float co = 1.f - q;
-						co = dt * dt * (p * co + p_near * co * co);
-						D.x = co * dir.x * 0.5f;
-						D.y = co * dir.y * 0.5f;
-						position[id].x += D.x;
-						position[id].y += D.y;
-						delta.x -= D.x;
-						delta.y -= D.y;
-					}	
-				}
-			}
-		}
-		position[i].x += delta.x;
-		position[i].y += delta.y;
-	}
-}
-///////////////////////////////////////////////////////////////////////////////
-void ResolveCollisions(float dt)
-{
-	for (int i=0; i<nParticles; i++)
-	{
-		float vx = velocity[i].x;
-		float vy = velocity[i].y;
-
-		if (position[i].x >= 1.f || position[i].x <= 0.f)
-		{
-			float col_dt = ((vx > 0 ? 1.f : 0.f) - position_old[i].x) / vx;
-			Point cpt;
-			cpt.x = position_old[i].x + vx * col_dt;
-			cpt.y = position_old[i].y + vy * col_dt;
-			
-			velocity[i].x = -vx * fRestitution;
-			velocity[i].y *= fFriction;
-
-			position[i].x = cpt.x - (vx * (dt - col_dt) * fRestitution);
-			position[i].y = cpt.y + (vy * (dt - col_dt) * fFriction);
 		}
 		
-		if (position[i].y >= 1.f || position[i].y <= 0.f)
+		float pressure = (fluid->Stiffness / std::max(1.f, fluid->Density)) * 
+			(mass - fluid->Density);
+
+		// Add a bit of a pushing force near the collision boundaries
+		float ax = 0.f, ay = 0.f;
+		float d = SDF.SampleDistance(fx, fy);
+		if (d < 3.f)
 		{
-			float col_dt = ((vy > 0 ? 1.f : 0.f) - position_old[i].y) / vy;
-			Point cpt;
-			cpt.x = position_old[i].x + vx * col_dt;
-			cpt.y = position_old[i].y + vy * col_dt;
+			float dirx, diry;
+			SDF.SampleGradient(fx, fy, &dirx, &diry);
+			ax += dirx * (1.f - (d / 3.f));
+			ay += diry * (1.f - (d / 3.f));
+		}
 
-			velocity[i].x *= fFriction;
-			velocity[i].y = -vy * fRestitution;
+		// Update grid acceleration values
+		for (int y=0; y<3; y++)
+		{
+			for (int x=0; x<3; x++)
+			{
+				float w = weight.wx[x] * weight.wy[y];
+				float dx = weight.gx[x] * weight.wy[y];
+				float dy = weight.wx[x] * weight.gy[y];
 
-			position[i].x = cpt.x + (vx * (dt - col_dt) * fFriction);
-			position[i].y = cpt.y - (vy * (dt - col_dt) * fRestitution);
+				GridCell & cell = Grid[cy + y][cx + x];
+				cell.ax += ax * w - dx * pressure - (dudx * dx + dudy * dy) * fluid->Viscosity * w;
+				cell.ay += ay * w - dy * pressure - (dvdx * dx + dvdy * dy) * fluid->Viscosity * w;
+			}
 		}
 	}
 }
 ///////////////////////////////////////////////////////////////////////////////
-void AddMousePuff(const Point & pt)
-{
-	int gx, gy;
-	GetGridCell(pt, &gx, &gy);
-	int ulx = std::max(0, gx - 1);
-	int uly = std::max(0, gy - 1);
-	int lrx = std::min(RES-1, gx + 1);
-	int lry = std::min(RES-1, gy + 1);
-
-	for (int x=ulx; x<=lrx; x++)
+void FluidSim::CalcVelocity(Fluid * fluid)
+{	
+	for (int i=0, lim=fluid->Particles.size(); i<lim; i++)
 	{
-		for (int y=uly; y<=lry; y++)
-		{
-			Cell & cell = grid[x][y];
-			for (unsigned j=0; j<cell.size(); j++)
-			{
-				int id = cell[j];
-				Point dir;
-				Sub(position[id], pt, &dir);
-				float d = Length(dir);
-				dir.x /= d;
-				dir.y /= d;
-				float strength = 9.8f / (1.f + (d * d) * 100000.f);
+		Particle & p = fluid->Particles[i];
+		float fx = p.x;
+		float fy = p.y;
+		int cx = std::min(GWidth-3, std::max(0, (int)(fx - 0.5f)));
+		int cy = std::min(GHeight-3, std::max(0, (int)(fy - 0.5f)));
 
-				velocity[id].x += dir.x * strength;
-				velocity[id].y += dir.y * strength;
+		// Add grid acceleration to the particle velocities
+		CellWeight & weight = fluid->Weights[i];
+		for (int y=0; y<3; y++)
+		{
+			for (int x=0; x<3; x++)
+			{
+				GridCell & cell = Grid[cy + y][cx + x];
+				float w = weight.wx[x] * weight.wy[y];
+				p.vx += w * cell.ax;
+				p.vy += w * cell.ay;
+			}
+		}
+
+		p.vx += GravityX;
+		p.vy += GravityY; 
+
+		// Check new position and push away from distance field boundaries
+		float nx = fx + p.vx;
+		float ny = fy + p.vy;
+		float d = SDF.SampleDistance(nx, ny);
+		if (d < 1.f)
+		{
+			float dirx, diry;
+			SDF.SampleGradient(nx, ny, &dirx, &diry);
+			p.vx += (dirx) * (1.f - d) * (1.f + frand() * 0.01f);
+			p.vy += (diry) * (1.f - d) * (1.f + frand() * 0.01f);
+		}
+
+		// Update fluid specific velocity grid
+		for (int y=0; y<3; y++)
+		{
+			for (int x=0; x<3; x++)
+			{
+				float w = weight.wx[x] * weight.wy[y];
+				GridCell & cell = fluid->Grid[cy+y][cx+x];
+				cell.m += w;
+				cell.vx += (w * p.vx);
+				cell.vy += (w * p.vy);
 			}
 		}
 	}
+
+	// Average out the fluid velocity grid
+	for (int y=0, ylim=GHeight; y<ylim; y++)
+	{
+		for (int x=0, xlim=GWidth; x<xlim; x++)
+		{
+			GridCell & cell = fluid->Grid[y][x];
+			float m = cell.m;
+			if (m == 0.f)
+				continue;
+			cell.vx /= m;
+			cell.vy /= m;
+		}
+	}
+}
+///////////////////////////////////////////////////////////////////////////////
+void FluidSim::UpdateParticles(Fluid * fluid)
+{
+	for (int i=0, lim=fluid->Particles.size(); i<lim; i++)
+	{
+		Particle & p = fluid->Particles[i];
+	
+		int cx = std::min(GWidth-3, std::max(0, (int)(p.x - 0.5f)));
+		int cy = std::min(GHeight-3, std::max(0, (int)(p.y - 0.5f)));
+
+		// Get interpolated velocity
+		CellWeight & weight = fluid->Weights[i];
+		float vx = 0.f, vy = 0.f;
+		for (int y=0; y<3; y++)
+		{
+			for (int x=0; x<3; x++)
+			{
+				GridCell & cell = fluid->Grid[cy+y][cx+x];
+				float w = weight.wx[x] * weight.wy[y];
+				vx += w * cell.vx;
+				vy += w * cell.vy;
+			}
+		}
+
+		// Update particle position, velocity
+		p.x += vx;
+		p.y += vy;
+		p.vx += GridCoeff * (vx - p.vx);
+		p.vy += GridCoeff * (vy - p.vy);
+
+		// Resolve collisions, clamp positions, update velocities based on this
+		float x = p.x;
+		float y = p.y;
+			
+		float d = SDF.SampleDistance(x, y);
+		if (d < 0.f)
+		{
+			float dx, dy;
+			SDF.SampleGradient(x, y, &dx, &dy);
+			x -= dx;
+			y -= dy;
+		}
+
+		x = std::min(std::max(x, 1.f), GWidth - 2.f);
+		y = std::min(std::max(y, 1.f), GHeight - 2.f);
+		p.x = x;
+		p.y = y;
+	}
+}
+///////////////////////////////////////////////////////////////////////////////
+int FluidSim::ParticleCount() const
+{
+	int count = 0;
+	for (unsigned i=0; i<Fluids.size(); i++)
+		count += Fluids[i]->Particles.size();
+	return count;
 }
 ///////////////////////////////////////////////////////////////////////////////

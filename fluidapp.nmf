@@ -1,6 +1,6 @@
 {
   "program": {
-    "x86-64": {"url": "sph_test_x86_64.nexe"},
-    "x86-32": {"url": "sph_test_x86_32.nexe"}
+    "x86-64": {"url": "fluidapp_x86_64.nexe"},
+    "x86-32": {"url": "fluidapp_x86_32.nexe"}
   }
 }
