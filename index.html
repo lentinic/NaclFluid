@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>NaCl Fluid Simulation | divergentcoder.com</title>
+	
+	<script type="text/javascript" src="jquery-1.6.4.min.js"></script>
+	<script type="text/javascript" src="jqModal.js"></script>
+	<link rel="stylesheet" href="jqModal.css" type="text/css" media="screen" />
+	<link rel="stylesheet" href="style.css" type="text/css" media="all" />
+	<link rel="stylesheet" type="text/css" media="all" href="http://divergentcoder.com/wp-content/themes/dvc/fonts/Colaborate/stylesheet.css" />
+	<link rel="stylesheet" type="text/css" media="all" href="http://divergentcoder.com/wp-content/themes/dvc/fonts/ArchitectsDaughter/stylesheet.css" />
+
+	<script type="text/javascript">
+		var fluidapp = null;
+		var paintInterval = null;
+		// Indicate load success.
+		function moduleDidLoad() {
+			fluidapp = document.getElementById('fluidapp');
+			paintInterval = setInterval('fluidapp.postMessage("Paint")', 33);
+		}
+
+		function handleMessage(message_event) {
+			//var output = null;
+			var msg = JSON.parse(message_event.data);
+			
+			if (msg.hasOwnProperty("Update")) {
+				document.getElementById("UpdateTiming").innerHTML = "Update Time: " + msg.Update + " ms";
+			}
+			else if (msg.hasOwnProperty("Render")) {
+				document.getElementById("RenderTiming").innerHTML = "Render Time: " + msg.Render + " ms";
+			}
+			else if (msg.hasOwnProperty("Count")) {
+				document.getElementById("ParticleCount").innerHTML = "Particle Count: " + msg.Count;
+			}
+		}
+
+		function pageUnload() {
+			clearInterval(paintInterval);
+		}
+	</script>
+	<!--<script type='text/javascript'>
+	var _gaq = _gaq || [];
+	_gaq.push(['_setAccount', 'UA-19142692-1']);
+	_gaq.push(['_trackPageview']);
+	(function() {
+	  var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+	  ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+	  var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+	})();
+	</script>-->
+</head>
+<body onunload="pageUnload()">
+
+<div id="page">
+	<div id="LeftContainer">
+		<div id="LeftColumn">
+			<div id="Header">
+				<a href="http://divergentcoder.com">
+					<div id="Title0">&lt;Divergent&gt;</div><div id="Title1">Coder</div>
+				</a>
+			</div>
+			<div id="menu">
+				<div class="menu">
+					<ul>
+						<li class="page_item page-item-47"><a href="http://divergentcoder.com/demos/">Demos</a></li>
+						<li class="page_item page-item-47"><a href="http://divergentcoder.com/photos/">Photos</a></li>
+						<li class="page_item page-item-94"><a href="http://divergentcoder.com/contact/">Contact</a></li>
+					</ul>
+				</div>
+			</div>
+		</div>
+	</div>
+	<div id="main">
+		<div id="ArticleContainer">
+		<article>
+			<header>
+				<h1>Native Client Fluid Simulation</h1>
+			</header>
+			<p>
+				<div id="listener">
+					<script type="text/javascript">
+						var listener = document.getElementById('listener');
+						listener.addEventListener('load', moduleDidLoad, true);
+						listener.addEventListener('message', handleMessage, true);
+					</script>
+					<center>
+					<embed name="nacl_module"
+						 id="fluidapp"
+						 width=512 height=512
+						 src="fluidapp.nmf"
+						 type="application/x-nacl" />
+					</center>
+				</div>
+				<div id="Controls">
+					<div id="StatContainer">
+						<div id="Status">
+							<div id="UpdateTiming" class="StatBox"></div>
+							<div id="RenderTiming" class="StatBox"></div>
+							<div id="ParticleCount" class="StatBox"></div>
+						</div>
+					</div>
+				</div>
+			</p>
+			<br />
+			<p>
+				<ul>
+					<li>Press '1' to add the first fluid at the current mouse position</li>
+					<li>Press '2' to add the second fluid at the current mouse position</li>
+					<li>Click the mouse to push particles away from the mouse position</li>
+				</ul>
+			</p>
+			<p>
+				<a href="javascript:ShowExplanation();">Explanation</a> | <a href="http://divergentcoder.com/data/NACLSDFCollision.zip">Source</a>
+			</p>
+		</article>
+		</div>
+		<div id="FooterContainer">
+			<div id="Footer">
+				<div id="FooterContent">
+					Copyright &copy; 2012 divergentcoder.com<br />
+					The views expressed on this site are mine alone and do not reflect the views of any person or entity other than myself. <br />
+					divergentcoder.com is proudly powered by
+					<a href="http://wordpress.org/">WordPress</a>
+				</div>
+			</div>
+		</div>
+		<article id="Explanation">
+			<h1>What This Is</h1>
+			<p>
+			This is a fluid simulation written in C++ and made available on the web via Google's <a href="https://developers.google.com/native-client/">Native Client</a>.  I originally wrote up an implementation of the paper <a href="http://dl.acm.org/citation.cfm?id=1073400">"Particle-based viscoelastic fluid simulation"</a> just to get my feet a little wet with Native Client.  I ended up revisiting it with the intention of just working on optimizing that implementation but ended up rewriting it and going with a different methodology after going through the fluid simulation rabbit hole a bit.
+			</p>
+			<p>
+			Rather than produce yet another explanation of Navier-Stokes and all the bits of math behind fluid simulation I will just link to a few different resources I found useful:
+			<ul>
+				<li><a href="http://www.cs.ubc.ca/~rbridson/fluidbook/">Fluid Simulation for Computer Graphics</a></li>
+				<li><a href="http://www.insomniacgames.com/gdc12-jim-van-verth-fluids-techniques/">Jim Van Verth - Fluids Techniques</a></li>
+				<li><a href="http://en.wikipedia.org/wiki/Navier%E2%80%93Stokes_equations">Wikipedia Entry on Navier-Stokes</a></li>
+				<li><a href="http://software.intel.com/en-us/articles/fluid-simulation-for-video-games-part-1/">Intel Fluid Simulation for Video Games Series</a></li>
+				<li><a href="http://www.sci.utah.edu/~guilkey/MPMPubs/steffen_08_IJNME_mpm_preprint.pdf">Analysis and Reduction of Quadrature Errors in the
+Material Point Method (MPM)</a></li>
+				<li><a href="http://kucg.korea.ac.kr/seminar/2008/src/PA-08-09-19.pdf">A Semi-Lagrangian CIP Fluid Solver
+without Dimensional Splitting</a></li>
+				<li><a href="http://grantkot.com/MPM/Liquid.html">Grant Kot's Fluid Demo</a></li>
+			</ul>
+			My simulation is to a large extent based off the work in the last few links; I started down this path after seeing Grant Kot's fantastic demo and fluid sim videos (which does a bit more than what I am doing here).  The simulation works by tracking individual particles within the context of a fixed grid and "spreading" the particle values into the grid using a biquadratic interpolation scheme.  From the grid I can then easily calculate my fluid forces and use these to then update the individual particles in the simulation.  It is much faster than what I was doing before and works pretty well - although the fluid does end up compressing more than it should and the gridding seems to end up making things a bit more viscous.  To be sure, I am not really going so much for accuracy here as something believeable and that could be dropped into a game to have some fun with.
+			</p>
+			<p>
+			As for the actual simulation steps they proceed roughly as follows:
+			<blockquote>
+				<ul>
+					<li>Clear all grid cells</li>
+					<li>For each particle</li>
+					<ul>
+						<li>Determine grid cell and the 8 surrounding cells</li>
+						<li>Calculate weights for biquadratic interpolation at particle position</li>
+						<li>Add particle mass and velocity to surrounding grid cells based on interpolation weights</li>
+					</ul>
+					<li>For each particle</li>
+					<ul>
+						<li>Calculate interpolated mass and velocity gradients at particle position</li>
+						<li>Use calculated mass and velocity gradient to determine pressure and viscosity forces</li>
+						<li>Add these forces back into the grid cells</li>
+					</ul>
+					<li>For each particle</li>
+					<ul>
+						<li>Calculate interpolated acceleration at particle position</li>
+						<li>Add acceleration due to gravity</li>
+						<li>Update particle velocity</li>
+						<li>Add particle velocity back into the grid cells</li>
+					</ul>
+					<li>For each particle</li>
+					<ul>
+						<li>Calculate interpolated velocity at particle position</li>
+						<li>Update particle position and velocity with interpolated velocity</li>
+					</ul>
+				</ul>
+			</blockquote>
+			Beyond that I also "cheat" a little and introduce a bit of a force near collision surfaces to push particles away.
+			</p>
+			<p>
+			For more detail you can check out the source code I have made available <a href="https://github.com/lentinic/NaclFluid">here</a>.
+			</p>
+		</article>
+	</div>
+</div>
+</body>
+
+<script type="text/javascript">
+	$("#Explanation").jqm();
+
+	function ShowExplanation() {
+		$("#Explanation").jqmShow();
+	}
+</script>
+
+<script type="text/javascript" src="dat.gui.min.js"></script>
+<script type="text/javascript">
+	var Sim = function() {
+		this.GridCoeff = 1.0;
+		this.GravityX = 0.0;
+		this.GravityY = 9.81;
+		this.ShowSurface = true;
+		this.ShowDistanceField = false;
+		this.ShowFiltered = true;
+		this.Clear = function() {
+			fluidapp.postMessage("Clear");
+		}
+	}
+
+	var Fluid = function(d, v, c) {
+		this.Density = d;
+		this.Viscosity = v;
+		this.Color = c;
+	}
+
+	var FluidControls = function(gui, id, props) {
+		var fluid = new Fluid(props.Density, props.Viscosity, props.Color);
+
+		var folder = gui.addFolder("Fluid " + id);
+		var d = folder.add(fluid, 'Density', 0.1, 20.0);
+		d.onChange(function(value) {
+			fluidapp.postMessage("Density " + id + " " + value);
+		});
+
+		var v = folder.add(fluid, 'Viscosity', 0.0, 10.0);
+		v.onChange(function(value) {
+			fluidapp.postMessage("Viscosity " + id + " " + value);
+		});
+
+		var c = folder.addColor(fluid, "Color");
+		c.onChange(function(value) {
+			var r = Math.floor(value[0]);
+			var g = Math.floor(value[1]);
+			var b = Math.floor(value[2]);
+			fluidapp.postMessage("Color " + id + " " + r + " " + g + " " + b);
+		});
+		folder.open();	
+	}
+
+	window.onload = function() {
+		var gui = new dat.GUI({ autoPlace: false });
+		var leftelement = document.getElementById("LeftColumn");
+		leftelement.appendChild(gui.domElement);
+
+		// General simulation controls
+		var sim = new Sim();
+
+		var ctrl = gui.add(sim, "Clear");
+
+		ctrl = gui.add(sim, "GridCoeff", 0.0, 1.0);
+		ctrl.onChange(function(value) {
+			fluidapp.postMessage("GridCoeff " + value);
+		});
+
+		ctrl = gui.add(sim, "GravityX", -30.0, 30.0);
+		ctrl.onChange(function(value) {
+			fluidapp.postMessage("GravityX " + value);
+		});
+
+		ctrl = gui.add(sim, "GravityY", -30.0, 30.0);
+		ctrl.onChange(function(value) {
+			fluidapp.postMessage("GravityY " + value);
+		});
+
+		ctrl = gui.add(sim, "ShowSurface");
+		ctrl.onChange(function(value) {
+			fluidapp.postMessage("ToggleSurface");
+		});
+
+		ctrl = gui.add(sim, "ShowDistanceField");
+		ctrl.onChange(function(value) {
+			fluidapp.postMessage("ToggleDistance");
+		});
+
+		ctrl = gui.add(sim, "ShowFiltered");
+		ctrl.onChange(function(value) {
+			fluidapp.postMessage("ToggleFiltering");
+		});
+
+		// Controls for the fluids
+		var fluid0 = new FluidControls(gui, 0, { Density: 2.0, Viscosity: 0.0, Color: [0,0,255]});
+		var fluid1 = new FluidControls(gui, 1, { Density: 1.0, Viscosity: 4.0, Color: [255,255,0]});
+	}
+</script>
+
+</html>
