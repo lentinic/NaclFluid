@@ -1,12 +1,19 @@
-This is a simple fluid simulation I put together in about a day to start playing with Google's Native Client.  Going forward I will be optimizing it for speed and then moving the rendering over to the GPU (and hopefully making it a little more pleasant to look at).
-  
-The fluid simulation is based off this paper:
+This is a fluid simulation written in C++ and made available on the web via Google's Native Client.  I originally wrote up an implementation of the paper "Particle-based viscoelastic fluid simulation" just to get my feet a little wet with Native Client.  I ended up revisiting it with the intention of just working on optimizing that implementation but ended up rewriting it and going with a different methodology after going through the fluid simulation rabbit hole a bit.
 
-	http://www.iro.umontreal.ca/labs/infographie/papers/Clavet-2005-PVFS/pvfs.pdf
+A few resources I found useful in the development of this simulation:
+
+	http://www.cs.ubc.ca/~rbridson/fluidbook/
+	http://www.insomniacgames.com/gdc12-jim-van-verth-fluids-techniques/
+	http://en.wikipedia.org/wiki/Navier%E2%80%93Stokes_equations
+	http://software.intel.com/en-us/articles/fluid-simulation-for-video-games-part-1/
+	http://www.sci.utah.edu/~guilkey/MPMPubs/steffen_08_IJNME_mpm_preprint.pdf
+	http://kucg.korea.ac.kr/seminar/2008/src/PA-08-09-19.pdf
+	http://grantkot.com/MPM/Liquid.html
 	
-You can see a working demo at:
-	
-	http://divergentcoder.com/NaclFluid/
-	
+My simulation is to a large extent based off the work in the last few links; I started down this path after seeing Grant Kot's fantastic demo and fluid sim videos (which does a bit more than what I am doing here).  The simulation works by tracking individual particles within the context of a fixed grid and "spreading" the particle values into the grid using a biquadratic interpolation scheme.  From the grid I can then easily calculate my fluid forces and use these to then update the individual particles in the simulation.  It is much faster than what I was doing before and works pretty well - although the fluid does end up compressing more than it should and the gridding seems to end up making things a bit more viscous.  To be sure, I am not really going so much for accuracy here as something believeable and that could be dropped into a game to have some fun with.
+
+You can view a working demo at:
+http://divergentcoder.com/NaclFluid	
+
 - Chris Lentini
 	
